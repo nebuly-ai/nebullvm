@@ -14,7 +14,6 @@ from nebullvm.base import ModelParams, DeepLearningFramework
 from nebullvm.config import (
     OPENVINO_FILENAMES,
     NO_COMPILER_INSTALLATION,
-    SAVE_DIR_NAME,
 )
 from nebullvm.inference_learners.base import (
     BaseInferenceLearner,
@@ -100,7 +99,7 @@ class OpenVinoInferenceLearner(BaseInferenceLearner, ABC):
         Returns:
             OpenVinoInferenceLearner: The optimized model.
         """
-        path = Path(path) / SAVE_DIR_NAME
+        path = Path(path)
         with open(path / OPENVINO_FILENAMES["metadata"], "r") as fin:
             metadata = json.load(fin)
         metadata.update(kwargs)
@@ -212,7 +211,7 @@ class OpenVinoInferenceLearner(BaseInferenceLearner, ABC):
             kwargs (Dict): Dictionary of key-value pairs that will be saved in
                 the model metadata file.
         """
-        path = Path(path) / SAVE_DIR_NAME
+        path = Path(path)
         path.mkdir(exist_ok=True)
         metadata = self._get_metadata(**kwargs)
         with open(path / OPENVINO_FILENAMES["metadata"], "w") as fout:

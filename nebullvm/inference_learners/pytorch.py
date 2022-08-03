@@ -4,7 +4,6 @@ from typing import Tuple, Union, Optional
 import torch
 
 from nebullvm.base import ModelParams
-from nebullvm.config import SAVE_DIR_NAME
 from nebullvm.inference_learners import (
     PytorchBaseInferenceLearner,
     LearnerMetadata,
@@ -34,7 +33,7 @@ class PytorchBackendInferenceLearner(PytorchBaseInferenceLearner):
             return tuple(out.to(device) for out in res)
 
     def save(self, path: Union[str, Path], **kwargs):
-        path = Path(path) / SAVE_DIR_NAME
+        path = Path(path)
         path.mkdir(exist_ok=True)
         metadata = LearnerMetadata.from_model(self, **kwargs)
         metadata.save(path)
@@ -42,7 +41,7 @@ class PytorchBackendInferenceLearner(PytorchBaseInferenceLearner):
 
     @classmethod
     def load(cls, path: Union[Path, str], **kwargs):
-        path = Path(path) / SAVE_DIR_NAME
+        path = Path(path)
         model = torch.jit.load(path / cls.MODEL_NAME)
         metadata = LearnerMetadata.read(path)
         return cls(

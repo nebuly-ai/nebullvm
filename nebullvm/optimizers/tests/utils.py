@@ -3,8 +3,12 @@ from typing import Tuple
 
 import torch
 
-from nebullvm.base import ModelParams
+from nebullvm.api.functions import _extract_info_from_data
+from nebullvm.api.huggingface import convert_hf_model
+from nebullvm.base import ModelParams, DeepLearningFramework
 from nebullvm.converters.torch_converters import convert_torch_to_onnx
+from nebullvm.utils.data import DataManager
+from transformers import AlbertModel, AlbertTokenizer
 
 INPUT_SHAPE = (3, 256, 256)
 OUTPUT_SHAPE = (2,)
@@ -72,3 +76,49 @@ def get_onnx_model(temp_dir: str, dynamic: bool = False):
         model, model_params = _build_static_model()
     convert_torch_to_onnx(model, model_params, model_path)
     return model_path, model_params
+
+
+def get_torch_model(dynamic: bool = False):
+    if dynamic:
+        model, model_params = _build_dynamic_model()
+    else:
+        model, model_params = _build_static_model()
+    return model, model_params
+
+
+def get_huggingface_model(temp_dir: str, dl_framework: DeepLearningFramework):
+    tokenizer = AlbertTokenizer.from_pretrained("albert-base-v1")
+    model = AlbertModel.from_pretrained("albert-base-v1")
+
+    text = "Short text you wish to process"
+    encoded_input = tokenizer(text, return_tensors="pt")
+
+    (
+        model,
+        input_data,
+        input_names,
+        output_structure,
+        output_type,
+    ) = convert_hf_model(model, [encoded_input])
+
+    input_data = DataManager(input_data)
+
+    model_path = os.path.join(temp_dir, "test_model.onnx")
+
+    model_params = _extract_info_from_data(
+        model,
+        input_data,
+        dl_framework,
+        None,
+    )
+
+    convert_torch_to_onnx(model, model_params, model_path, input_data)
+
+    return (
+        model_path,
+        model_params,
+        output_structure,
+        input_names,
+        output_type,
+        input_data,
+    )

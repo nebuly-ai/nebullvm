@@ -22,6 +22,11 @@ def test_tvm(output_library: DeepLearningFramework, dynamic: bool):
         model = optimizer.optimize(model_path, output_library, model_params)
         assert isinstance(model, TVM_INFERENCE_LEARNERS[output_library])
 
+        # Test save and load functions
+        model.save(tmp_dir)
+        loaded_model = TVM_INFERENCE_LEARNERS[output_library].load(tmp_dir)
+        assert isinstance(loaded_model, TVM_INFERENCE_LEARNERS[output_library])
+
         inputs_example = model.get_inputs_example()
         res = model.predict(*inputs_example)
         assert res is not None

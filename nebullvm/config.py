@@ -43,5 +43,3 @@ TENSORFLOW_BACKEND_FILENAMES = {
     "tflite_model": "tf_model.tflite",
     "tf_model": "tf_model.h5",
 }
-
-SAVE_DIR_NAME = "optimized_model"

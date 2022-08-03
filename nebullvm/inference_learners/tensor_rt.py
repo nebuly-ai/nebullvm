@@ -12,7 +12,6 @@ from nebullvm.base import ModelParams, DeepLearningFramework
 from nebullvm.config import (
     NVIDIA_FILENAMES,
     NO_COMPILER_INSTALLATION,
-    SAVE_DIR_NAME,
 )
 from nebullvm.inference_learners.base import (
     BaseInferenceLearner,
@@ -209,7 +208,7 @@ class NvidiaInferenceLearner(BaseInferenceLearner, ABC):
             kwargs (Dict): Dictionary of key-value pairs that will be saved in
                 the model metadata file.
         """
-        path = Path(path) / SAVE_DIR_NAME
+        path = Path(path)
         path.mkdir(exist_ok=True)
         serialized_engine = self.engine.serialize()
         with open(path / NVIDIA_FILENAMES["engine"], "wb") as fout:
@@ -231,7 +230,7 @@ class NvidiaInferenceLearner(BaseInferenceLearner, ABC):
         Returns:
             NvidiaInferenceLearner: The optimized model.
         """
-        path = Path(path) / SAVE_DIR_NAME
+        path = Path(path)
         with open(path / NVIDIA_FILENAMES["metadata"], "r") as fin:
             metadata = json.load(fin)
         metadata.update(kwargs)
@@ -245,6 +244,59 @@ class NvidiaInferenceLearner(BaseInferenceLearner, ABC):
             )
         return cls.from_engine_path(
             engine_path=path / NVIDIA_FILENAMES["engine"], **metadata
+        )
+
+
+class PytorchTensorRTInferenceLearner(PytorchBaseInferenceLearner):
+    MODEL_NAME = "model_optimized.pt"
+
+    def __init__(
+        self, torch_model: torch.jit.ScriptModule, dtype: torch.dtype, **kwargs
+    ):
+        super().__init__(**kwargs)
+        self.model = torch_model.eval()
+        if torch.cuda.is_available():
+            self.model.cuda()
+        self.dtype = dtype
+
+    def run(self, *input_tensors: torch.Tensor) -> Tuple[torch.Tensor, ...]:
+        device = input_tensors[0].device
+        if torch.cuda.is_available():
+            if self.dtype == torch.half:
+                input_tensors = (t.cuda().half() for t in input_tensors)
+            else:
+                input_tensors = (t.cuda() for t in input_tensors)
+
+        with torch.no_grad():
+            res = self.model(*input_tensors)
+            if not isinstance(res, tuple):
+                res = res.to(device)
+                return (res,)
+            return tuple(out.to(device) for out in res)
+
+    def save(self, path: Union[str, Path], **kwargs):
+        path = Path(path)
+        path.mkdir(exist_ok=True)
+        metadata = LearnerMetadata.from_model(self, **kwargs)
+        metadata.dtype = str(self.dtype)
+        metadata.save(path)
+        torch.jit.save(self.model, path / self.MODEL_NAME)
+
+    @classmethod
+    def load(cls, path: Union[Path, str], **kwargs):
+        path = Path(path)
+        model = torch.jit.load(path / cls.MODEL_NAME)
+        metadata = LearnerMetadata.read(path)
+        dtype = (
+            torch.float32 if metadata.dtype == "torch.float32" else torch.half
+        )
+        return cls(
+            torch_model=model,
+            network_parameters=ModelParams(**metadata.network_parameters),
+            input_tfms=MultiStageTransformation.from_dict(metadata.input_tfms)
+            if metadata.input_tfms is not None
+            else None,
+            dtype=dtype,
         )
 
 

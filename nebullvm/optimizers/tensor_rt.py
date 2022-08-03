@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import List, Tuple, Optional, Callable
+import warnings
 
 import numpy as np
 import torch
@@ -9,6 +10,7 @@ from nebullvm.config import NVIDIA_FILENAMES, NO_COMPILER_INSTALLATION
 from nebullvm.inference_learners.tensor_rt import (
     NVIDIA_INFERENCE_LEARNERS,
     NvidiaInferenceLearner,
+    PytorchTensorRTInferenceLearner,
 )
 from nebullvm.optimizers.base import (
     BaseOptimizer,
@@ -28,12 +30,13 @@ from nebullvm.utils.onnx import (
     convert_to_numpy,
 )
 
+from nebullvm.utils.torch import run_torch_model
+
 if torch.cuda.is_available():
     try:
         import tensorrt as trt
     except ImportError:
         from nebullvm.installers.installers import install_tensor_rt
-        import warnings
 
         if not NO_COMPILER_INSTALLATION:
             warnings.warn(
@@ -45,6 +48,25 @@ if torch.cuda.is_available():
         else:
             warnings.warn(
                 "No TensorRT valid installation has been found. "
+                "It won't be possible to use it in the following."
+            )
+    try:
+        import torch_tensorrt
+    except ImportError:
+        # TODO: Remove the False flag for allowing Torch-TensorRT to
+        #  be installed by the Auto-Installer.
+        if False and not NO_COMPILER_INSTALLATION:
+            from nebullvm.installers.installers import install_torch_tensor_rt
+
+            warnings.warn(
+                "No Torch TensorRT valid installation has been found. "
+                "Trying to install it from source."
+            )
+            install_torch_tensor_rt()
+            import torch_tensorrt
+        else:
+            warnings.warn(
+                "No Torch TensorRT valid installation has been found. "
                 "It won't be possible to use it in the following."
             )
 
@@ -71,7 +93,16 @@ class TensorRTOptimizer(BaseOptimizer):
         # build the engine
         # TODO: setup config value for the class in a config file
         config = builder.create_builder_config()
-        config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 1 << 30)
+        try:
+            config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 1 << 30)
+        except AttributeError:
+            # The method set_memory_pool_limit is not available
+            # until TensorRT Release 8.4.1
+            warnings.warn(
+                "Cannot call method set_memory_pool_limit for TensorRT."
+                "Please update TensorRT version."
+            )
+            pass
         if quantization_type is QuantizationType.HALF:
             config.set_flag(trt.BuilderFlag.FP16)
         elif quantization_type is QuantizationType.STATIC:
@@ -246,3 +277,85 @@ class TensorRTOptimizer(BaseOptimizer):
             if not is_valid:
                 return None
         return learner
+
+    def optimize_from_torch(
+        self,
+        torch_model: torch.nn.Module,
+        model_params: ModelParams,
+        input_tfms: MultiStageTransformation = None,
+        metric_drop_ths: float = None,
+        quantization_type: QuantizationType = None,
+        metric: Callable = None,
+        input_data: DataManager = None,
+    ) -> Optional[PytorchTensorRTInferenceLearner]:
+        self._log(
+            f"Optimizing with {self.__class__.__name__} and "
+            f"q_type: {quantization_type}."
+        )
+        if not torch.cuda.is_available():
+            raise SystemError(
+                "You are trying to run an optimizer developed for NVidia gpus "
+                "on a machine not connected to any GPU supporting CUDA."
+            )
+
+        supported_q_types = [
+            None,
+            QuantizationType.HALF,
+        ]
+
+        if quantization_type not in supported_q_types:
+            return None
+
+        dtype = torch.float32
+
+        if metric_drop_ths is not None:
+            if quantization_type is QuantizationType.HALF:
+                dtype = torch.half
+
+        trt_model = torch_tensorrt.compile(
+            torch_model.eval(),
+            inputs=[
+                torch_tensorrt.Input(
+                    (model_params.batch_size, *input_info.size), dtype=dtype
+                )
+                for input_info in model_params.input_infos
+            ],
+            enabled_precisions=dtype,
+            workspace_size=1 << 22,
+        )
+
+        model = PytorchTensorRTInferenceLearner(
+            torch_model=trt_model,
+            network_parameters=model_params,
+            input_tfms=input_tfms,
+            input_data=list(input_data.get_list(1)[0])
+            if input_data is not None
+            else None,
+            dtype=dtype,
+        )
+
+        if quantization_type is not None:
+            if input_data is None:
+                inputs = [model.get_inputs_example()]
+                ys = None
+            else:
+                inputs, ys = input_data.get_list(
+                    100, shuffle=True, with_ys=True
+                )
+            output_data = [
+                tuple(
+                    run_torch_model(trt_model, list(tuple_), dtype=torch.half)
+                )
+                for tuple_ in inputs
+            ]
+            is_valid = check_precision(
+                model,
+                inputs,
+                output_data,
+                metric_drop_ths,
+                metric_func=metric,
+                ys=ys,
+            )
+            if not is_valid:
+                return None
+        return model

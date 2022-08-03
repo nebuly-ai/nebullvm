@@ -1,14 +1,11 @@
 from tempfile import TemporaryDirectory
 
-import cpuinfo
 import pytest
 
 from nebullvm.base import DeepLearningFramework
-from nebullvm.inference_learners.openvino import (
-    OPENVINO_INFERENCE_LEARNERS,
-)
-from nebullvm.optimizers.openvino import OpenVinoOptimizer
-from nebullvm.optimizers.tests.utils import get_onnx_model
+from nebullvm.inference_learners.pytorch import PytorchBackendInferenceLearner
+from nebullvm.optimizers.pytorch import PytorchBackendOptimizer
+from nebullvm.optimizers.tests.utils import get_torch_model
 
 
 @pytest.mark.parametrize(
@@ -18,24 +15,17 @@ from nebullvm.optimizers.tests.utils import get_onnx_model
         (DeepLearningFramework.PYTORCH, False),
     ],
 )
-def test_openvino(output_library: DeepLearningFramework, dynamic: bool):
-    if "intel" not in cpuinfo.get_cpu_info()["brand_raw"].lower():
-        # No intel cpu detected
-        return
+def test_torchscript(output_library: DeepLearningFramework, dynamic: bool):
     with TemporaryDirectory() as tmp_dir:
-        model_path, model_params = get_onnx_model(tmp_dir, dynamic)
-        optimizer = OpenVinoOptimizer()
+        model_path, model_params = get_torch_model(dynamic)
+        optimizer = PytorchBackendOptimizer()
         model = optimizer.optimize(model_path, output_library, model_params)
-        assert isinstance(model, OPENVINO_INFERENCE_LEARNERS[output_library])
+        assert isinstance(model, PytorchBackendInferenceLearner)
 
         # Test save and load functions
         model.save(tmp_dir)
-        loaded_model = OPENVINO_INFERENCE_LEARNERS[output_library].load(
-            tmp_dir
-        )
-        assert isinstance(
-            loaded_model, OPENVINO_INFERENCE_LEARNERS[output_library]
-        )
+        loaded_model = PytorchBackendInferenceLearner.load(tmp_dir)
+        assert isinstance(loaded_model, PytorchBackendInferenceLearner)
 
         inputs_example = list(model.get_inputs_example())
         res = model.predict(*inputs_example)

@@ -16,7 +16,6 @@ from nebullvm.config import (
     ONNX_FILENAMES,
     CUDA_PROVIDERS,
     NO_COMPILER_INSTALLATION,
-    SAVE_DIR_NAME,
 )
 from nebullvm.inference_learners.base import (
     BaseInferenceLearner,
@@ -137,7 +136,7 @@ class ONNXInferenceLearner(BaseInferenceLearner, ABC):
             **kwargs,
         )
 
-        path = Path(path) / SAVE_DIR_NAME
+        path = Path(path)
         path.mkdir(exist_ok=True)
 
         metadata.save(path)
@@ -179,7 +178,7 @@ class ONNXInferenceLearner(BaseInferenceLearner, ABC):
                 f"No extra keywords expected for the load method. "
                 f"Got {kwargs}."
             )
-        path = Path(path) / SAVE_DIR_NAME
+        path = Path(path)
         onnx_path = path / ONNX_FILENAMES["model_name"]
         metadata = LearnerMetadata.read(path)
         input_tfms = metadata.input_tfms

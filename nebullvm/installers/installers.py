@@ -56,6 +56,7 @@ def install_tvm(working_dir: str = None):
 
 
 def install_bladedisc():
+    """Helper function for installing BladeDisc."""
     has_cuda = False
     if torch.cuda.is_available():
         has_cuda = True
@@ -63,6 +64,52 @@ def install_bladedisc():
     path = Path(__file__).parent
     installation_file = str(path / "install_bladedisc.sh")
     subprocess.Popen(["bash", installation_file, str(has_cuda).lower()])
+
+
+def install_torch_tensor_rt():
+    """Helper function for installing Torch-TensorRT.
+
+    The function will install the software only if a cuda driver is available.
+    """
+    if not torch.cuda.is_available():
+        raise RuntimeError(
+            "Torch-TensorRT can run just on Nvidia machines. "
+            "No available cuda driver has been found."
+        )
+
+    # Verify that TensorRT is installed, otherwise install it
+    try:
+        import tensorrt  # noqa F401
+    except ImportError:
+        install_tensor_rt()
+
+    # Will work when Torch-TensorRT v1.2 will be available
+    cmd = [
+        "pip3",
+        "install",
+        "torch-tensorrt",
+        "-f",
+        "https://github.com/pytorch/TensorRT/releases",
+    ]
+    subprocess.run(cmd)
+
+    # # Install Torch-TensorRT from alpha wheel, works with python3.7
+    # cmd = [
+    #     "wget",
+    #     "https://output.circle-artifacts.com/output/job/32d63a4c-0c"
+    #     "5d-42d0-a150-629ec1f3d376/artifacts/0/x86_64-release-pkgs/"
+    #     "torch_tensorrt-1.2.0a0-cp37-cp37m-linux_x86_64.whl",
+    # ]
+    # subprocess.run(cmd)
+    #
+    # cmd = [
+    #     "pip",
+    #     "install",
+    #     "./torch_tensorrt-1.2.0a0-cp37-cp37m-linux_x86_64.whl",
+    # ]
+    # subprocess.run(cmd)
+    #
+    # os.remove("./torch_tensorrt-1.2.0a0-cp37-cp37m-linux_x86_64.whl")
 
 
 def install_tensor_rt():

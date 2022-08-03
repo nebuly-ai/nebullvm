@@ -22,6 +22,15 @@ def bladedisc_is_available() -> bool:
         return False
 
 
+def torch_tensorrt_is_available() -> bool:
+    try:
+        import torch_tensorrt  # noqa F401
+
+        return True
+    except ImportError:
+        return False
+
+
 def deepsparse_is_available() -> bool:
     try:
         import deepsarse  # noqa F401

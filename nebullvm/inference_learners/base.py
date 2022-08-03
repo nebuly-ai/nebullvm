@@ -540,7 +540,7 @@ class InferenceLearnerWrapper(BaseInferenceLearner, ABC):
 
     def save(self, path: Union[str, Path], **kwargs):
         core_model_path = Path(path) / self.CORE_MODEL_SAVE_DIR
-        core_model_path.mkdir(exist_ok=True)
+        core_model_path.mkdir(exist_ok=True, parents=True)
         self.core_inference_learner.save(core_model_path, **kwargs)
         extra_metadata_kwargs = self._get_extra_metadata_kwargs()
         metadata = LearnerMetadata.from_model(self, **extra_metadata_kwargs)

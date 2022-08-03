@@ -42,4 +42,4 @@ jobs:
         run: pip install pytest
         # Run the tests ignoring tvm
       - name: Run tests
-        run: pytest --ignore=nebullvm/optimizers/tests/test_tvm.py
+        run: pytest --ignore=nebullvm/optimizers/tests/test_tvm.py --ignore=nebullvm/optimizers/tests/test_bladedisc.py
